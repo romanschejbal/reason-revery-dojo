@@ -61,7 +61,7 @@ typings/
 # next.js build output
 .next
 
-# esy 
+# esy
 _build/
 _esy/
 

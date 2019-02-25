@@ -3,34 +3,134 @@ open Revery.Core;
 open Revery.Math;
 open Revery.UI;
 open Revery.UI.Components;
+open Lwt;
 
-module AnimatedText = {
-  let component = React.component("AnimatedText");
+module type StoryDaoT = {
+  type t;
+  let fetchTopStories: unit => Lwt.t(list(string));
+  let fetchStory: string => Lwt.t(t);
+  let title: t => string;
+};
 
-  let createElement = (~children as _, ~delay, ~textContent, ()) =>
-    component(hooks => {
-      let (translate, hooks) =
-        Hooks.animation(
-          Animated.floatValue(50.),
-          {
-            toValue: 0.,
-            duration: Seconds(0.5),
-            delay: Seconds(delay),
-            repeat: false,
-            easing: Animated.linear,
-          },
-          hooks,
+module StoryDao: StoryDaoT = {
+  type view = {
+    by: string,
+    id: int,
+    score: int,
+    time: int,
+    title: string,
+    url: option(string),
+  };
+
+  type t = view;
+
+  let getJson = url => {
+    print_endline("Fetching url: " ++ url);
+    Cohttp_lwt_unix.Client.get(Uri.of_string(url))
+    >>= (
+      ((_response, body)) => {
+        Cohttp_lwt.Body.to_string(body)
+        >|= (
+          string => {
+            print_endline(string);
+            Yojson.Basic.from_string(string);
+          }
         );
+      }
+    );
+  };
 
-      let (opacityVal: float, hooks) =
-        Hooks.animation(
-          Animated.floatValue(0.),
-          {
-            toValue: 1.0,
-            duration: Seconds(1.),
-            delay: Seconds(delay),
-            repeat: false,
-            easing: Animated.linear,
+  let fetchStory: string => Lwt.t(t) =
+    storyId => {
+      let storyUrl =
+        "https://hacker-news.firebaseio.com/v0/item/"
+        ++ storyId
+        ++ ".json?print=pretty";
+      getJson(storyUrl)
+      >|= (
+        response =>
+          Yojson.Basic.Util.{
+            by: member("by", response) |> to_string,
+            id: member("id", response) |> to_int,
+            score: member("score", response) |> to_int,
+            time: member("time", response) |> to_int,
+            title: member("title", response) |> to_string,
+            url: member("url", response) |> to_string_option,
+          }
+      );
+    };
+
+  let fetchTopStories = () => {
+    let topStoriesUrl = "https://hacker-news.firebaseio.com/v0/topstories.json?print=pretty";
+    getJson(topStoriesUrl)
+    >|= (
+      response =>
+        Yojson.Basic.Util.(
+          to_list(response) |> filter_int |> List.map(string_of_int)
+        )
+    );
+  };
+
+  let title = story => story.title;
+};
+
+type story =
+  | Fetched(StoryDao.t)
+  | NotFetched(string);
+
+module Story = {
+  let component = React.component("Story");
+
+  let createElement = (~children as _, ~story: story, ()) =>
+    component(hooks => {
+      let storyStyle =
+        Style.[padding(10), border(~color=Colors.white, ~width=1)];
+      let headerStyle =
+        Style.[fontFamily("Roboto-Regular.ttf"), fontSize(18)];
+      let contentStyle =
+        Style.[fontFamily("Roboto-Regular.ttf"), fontSize(12)];
+      (
+        hooks,
+        <View style=storyStyle>
+          <View> <Text style=headerStyle text="Story header" /> </View>
+          <View> <Text style=contentStyle text="Story content" /> </View>
+        </View>,
+      );
+    });
+};
+
+module StoryList = {
+  let component = React.component("StoryList");
+
+  let createElement = (~children as _, ()) =>
+    component(hooks => {
+      let (stories, setStories, hooks) =
+        React.Hooks.state([NotFetched("1"), NotFetched("2")], hooks);
+      let hooks =
+        React.Hooks.effect(
+          OnMount,
+          () => {
+            print_endline("Fetching stories...");
+            let body = Lwt_main.run(StoryDao.fetchTopStories());
+            List.map(id => NotFetched(id), body) |> setStories;
+            /* StoryDao.fetchTopStories()
+               >|= (
+                 storyIds => {
+                   setStories(List.map(id => NotFetched(id), storyIds));
+                   List.iter(
+                     id =>
+                       StoryDao.fetchStory(id)
+                       >|= (
+                         story =>
+                           print_endline("Fetched " ++ StoryDao.title(story))
+                       )
+                       |> Lwt_main.run,
+                     storyIds,
+                   );
+                 }
+               ); */
+
+            Some(() => print_endline("Unmount"));
           },
           hooks,
         );
@@ -41,44 +141,15 @@ module AnimatedText = {
           fontFamily("Roboto-Regular.ttf"),
           fontSize(24),
           marginHorizontal(8),
-          opacity(opacityVal),
-          transform([Transform.TranslateY(translate)]),
         ];
 
-      (hooks, <Text style=textHeaderStyle text=textContent />);
-    });
-};
-
-module SimpleButton = {
-  let component = React.component("SimpleButton");
-
-  let createElement = (~children as _, ()) =>
-    component(hooks => {
-      let (count, setCount, hooks) =
-        React.Hooks.state(0, hooks);
-      let increment = () => setCount(count + 1);
-
-      let wrapperStyle =
-        Style.[
-          backgroundColor(Color.rgba(1., 1., 1., 0.1)),
-          border(~width=2, ~color=Colors.white),
-          margin(16),
-        ];
-
-      let textHeaderStyle =
-        Style.[
-          color(Colors.white),
-          fontFamily("Roboto-Regular.ttf"),
-          fontSize(20),
-          margin(4),
-        ];
-
-      let textContent = "Click me: " ++ string_of_int(count);
-      (hooks, <Clickable onClick=increment>
-        <View style=wrapperStyle>
-          <Text style=textHeaderStyle text=textContent />
-        </View>
-      </Clickable>);
+      (
+        hooks,
+        <View>
+          <Text text="Stories" style=textHeaderStyle />
+          {React.listToElement(List.map(story => <Story story />, stories))}
+        </View>,
+      );
     });
 };
 
@@ -88,25 +159,16 @@ let init = app => {
   let containerStyle =
     Style.[
       position(`Absolute),
-      justifyContent(`Center),
+      justifyContent(`FlexStart),
       alignItems(`Center),
       bottom(0),
       top(0),
       left(0),
       right(0),
+      backgroundColor(Colors.black),
     ];
 
-  let innerStyle = Style.[flexDirection(`Row), alignItems(`FlexEnd)];
-
-  let render = () =>
-    <View style=containerStyle>
-      <View style=innerStyle>
-        <AnimatedText delay=0.0 textContent="Welcome" />
-        <AnimatedText delay=0.5 textContent="to" />
-        <AnimatedText delay=1. textContent="Revery" />
-      </View>
-      <SimpleButton />
-    </View>;
+  let render = () => <View style=containerStyle> <StoryList /> </View>;
 
   UI.start(win, render);
 };

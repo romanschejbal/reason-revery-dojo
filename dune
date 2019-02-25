@@ -6,4 +6,8 @@
         bigarray
         reglfw
         Revery
+        Yojson
+        cohttp
+        cohttp-lwt-unix
+        ssl
             ))
