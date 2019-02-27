@@ -6,5 +6,5 @@
         bigarray
         reglfw
         Revery
-        Yojson
+        yojson
             ))
