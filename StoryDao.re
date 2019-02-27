@@ -11,19 +11,23 @@ type view = {
 
 type t = view;
 
+type story =
+  | Fetched(t)
+  | NotFetched(int);
+
 let fetchTopStories = () => {
   let json = Yojson.Basic.from_file("./stories.json");
   json
   |> to_list
   |> List.map(storyDetail =>
-       {
+       Fetched({
          by: member("by", storyDetail) |> to_string,
          id: member("id", storyDetail) |> to_int,
          title: member("title", storyDetail) |> to_string,
          score: member("score", storyDetail) |> to_int,
          time: member("time", storyDetail) |> to_int,
          url: member("url", storyDetail) |> to_string_option,
-       }
+       })
      );
 };
 
