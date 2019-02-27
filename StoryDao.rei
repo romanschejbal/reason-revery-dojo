@@ -1,5 +1,7 @@
 type t;
-type story;
+type story =
+  | Fetched(t)
+  | NotFetched(int);
 let fetchTopStories: unit => list(story);
 let view_title: t => string;
 let view_id: t => int;
