@@ -26,5 +26,9 @@
     "format": "bash -c \"refmt --in-place *.re\"",
     "run": "esy x App"
   },
-  "devDependencies": { "ocaml": "~4.7.0", "@opam/merlin": "3.2.2", "@opam/rtop": "3.4.0" }
+  "devDependencies": {
+    "ocaml": "~4.7.0",
+    "@opam/merlin": "3.2.2",
+    "@opam/rtop": "3.4.0"
+  }
 }
